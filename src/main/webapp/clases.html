@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Clases</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+          crossorigin="anonymous">
+    <style>
+        body { padding-top: 20px; }
+        .container { max-width: 900px; }
+        .table-actions button { margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Gestión de Clases</h1>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 id="formTitleClase">Agregar Nueva Clase</h5>
+            </div>
+            <div class="card-body">
+                <form id="claseForm">
+                    <input type="hidden" id="idClase" name="idClase">
+                    
+                    <div class="mb-3">
+                        <label for="fechaClase" class="form-label">Fecha de la Clase</label>
+                        <input type="date" class="form-control" id="fechaClase" name="fechaClase">
+                        <small class="form-text text-muted">Si se deja en blanco, se usará la fecha actual al crear.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="idMateria" class="form-label">ID de la Materia</label>
+                        <input type="number" class="form-control" id="idMateria" name="idMateria" required min="1">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="idProfesor" class="form-label">ID del Profesor</label>
+                        <input type="number" class="form-control" id="idProfesor" name="idProfesor" required min="1">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="idCurso" class="form-label">ID del Curso</label>
+                        <input type="number" class="form-control" id="idCurso" name="idCurso" required min="1">
+                    </div>
+                                        
+                    <button type="submit" class="btn btn-primary" id="btnSubmitClase">Agregar Clase</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelClase" style="display: none;">Cancelar Edición</button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2>Lista de Clases</h2>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID Clase</th>
+                        <th>Fecha Clase</th>
+                        <th>ID Materia</th>
+                        <th>ID Profesor</th>
+                        <th>ID Curso</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="clasesTableBody">
+                    <!-- Los datos se cargarán aquí -->
+                </tbody>
+            </table>
+        </div>
+        <div id="alertMessagesClase" class="mt-3"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+            crossorigin="anonymous"></script>
+            <script>
+        document.addEventListener('DOMContentLoaded', () => {
+    const BASE_URL_CLASE = 'ClaseServlet'; 
+
+    const claseForm = document.getElementById('claseForm');
+    const idClaseInput = document.getElementById('idClase');
+    const fechaClaseInput = document.getElementById('fechaClase');
+    const idMateriaInput = document.getElementById('idMateria');
+    const idProfesorInput = document.getElementById('idProfesor');
+    const idCursoInput = document.getElementById('idCurso');
+    const clasesTableBody = document.getElementById('clasesTableBody');
+    const formTitleClase = document.getElementById('formTitleClase');
+    const btnSubmitClase = document.getElementById('btnSubmitClase');
+    const btnCancelClase = document.getElementById('btnCancelClase');
+    const alertMessagesDivClase = document.getElementById('alertMessagesClase');
+
+    let editModeClase = false;
+
+    function showAlertClase(message, type = 'danger') {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = [
+            `<div class="alert alert-${type} alert-dismissible" role="alert">`,
+            `   <div>${escapeHtmlClase(message)}</div>`,
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+            '</div>'
+        ].join('');
+        alertMessagesDivClase.innerHTML = ''; 
+        alertMessagesDivClase.append(wrapper);
+        
+        setTimeout(() => {
+            const alert = bootstrap.Alert.getOrCreateInstance(wrapper.firstChild);
+            if (alert) {
+                alert.close();
+            }
+        }, 7000);
+    }
+
+    // --- Funciones CRUD para Clases ---
+
+    async function fetchGetClases() {
+        try {
+            const response = await fetch(BASE_URL_CLASE);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener clases: ${response.statusText}`);
+            }
+            const clases = await response.json();
+            renderTablaClases(clases);
+        } catch (error) {
+            console.error('Error en fetchGetClases:', error);
+            showAlertClase(`Error al cargar clases: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchGetClasePorId(id) {
+        try {
+            const response = await fetch(`${BASE_URL_CLASE}?id=${id}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener clase: ${response.statusText}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error en fetchGetClasePorId:', error);
+            showAlertClase(`Error al obtener datos de la clase para editar: ${error.message}`, 'danger');
+            return null;
+        }
+    }
+    
+    async function fetchPostClase(claseData) {
+        try {
+            const response = await fetch(BASE_URL_CLASE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: JSON.stringify(claseData)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al crear clase: ${response.statusText}`);
+            }
+            const nuevaClase = await response.json();
+            console.log('Clase creada:', nuevaClase);
+            fetchGetClases();
+            resetClaseForm();
+            showAlertClase('Clase agregada exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchPostClase:', error);
+            showAlertClase(`Error al crear clase: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchPutClase(id, claseData) {
+        try {
+            const dataToSend = { idClase: parseInt(id), ...claseData };
+            const response = await fetch(BASE_URL_CLASE, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: JSON.stringify(dataToSend)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al actualizar clase: ${response.statusText}`);
+            }
+            const claseActualizada = await response.json();
+            console.log('Clase actualizada:', claseActualizada);
+            fetchGetClases();
+            resetClaseForm();
+            showAlertClase('Clase actualizada exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchPutClase:', error);
+            showAlertClase(`Error al actualizar clase: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchDeleteClase(id) {
+        if (!confirm(`¿Está seguro de que desea eliminar la clase con ID ${id}?`)) {
+            return;
+        }
+        try {
+            const response = await fetch(`${BASE_URL_CLASE}?id=${id}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al eliminar clase: ${response.statusText}`);
+            }
+            const resultado = await response.json();
+            console.log('Respuesta de eliminación:', resultado);
+            fetchGetClases();
+            showAlertClase(resultado.message || 'Clase eliminada exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchDeleteClase:', error);
+            showAlertClase(`Error al eliminar clase: ${error.message}`, 'danger');
+        }
+    }
+
+    // --- Funciones Auxiliares ---
+
+    function renderTablaClases(clases) {
+        clasesTableBody.innerHTML = '';
+        if (!clases || !Array.isArray(clases) || clases.length === 0) {
+            clasesTableBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay clases registradas.</td></tr>';
+            return;
+        }
+        clases.forEach(clase => {
+            const tr = document.createElement('tr');
+            const fechaClaseDisplay = clase.fechaClase ? clase.fechaClase : 'N/A';
+            
+            tr.innerHTML = `
+                <td>${clase.idClase}</td>
+                <td>${fechaClaseDisplay}</td>
+                <td>${clase.idMateria !== null ? clase.idMateria : 'N/A'}</td>
+                <td>${clase.idProfesor !== null ? clase.idProfesor : 'N/A'}</td>
+                <td>${clase.idCurso !== null ? clase.idCurso : 'N/A'}</td>
+                <td class="table-actions">
+                    <button class="btn btn-sm btn-warning btn-edit-clase" data-id="${clase.idClase}">Editar</button>
+                    <button class="btn btn-sm btn-danger btn-delete-clase" data-id="${clase.idClase}">Eliminar</button>
+                </td>
+            `;
+            clasesTableBody.appendChild(tr);
+        });
+    }
+    
+    function escapeHtmlClase(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe === null || typeof unsafe === 'undefined' ? '' : String(unsafe);
+        return unsafe
+             .replace(/&/g, "&")
+             .replace(/</g, "<")
+             .replace(/>/g, ">")
+             .replace(/"/g, "")
+             .replace(/'/g, "'");
+    }
+
+    function resetClaseForm() {
+        claseForm.reset();
+        idClaseInput.value = '';
+        formTitleClase.textContent = 'Agregar Nueva Clase';
+        btnSubmitClase.textContent = 'Agregar Clase';
+        btnSubmitClase.classList.remove('btn-warning');
+        btnSubmitClase.classList.add('btn-primary');
+        btnCancelClase.style.display = 'none';
+        idMateriaInput.required = true;
+        idProfesorInput.required = true;
+        idCursoInput.required = true;
+        editModeClase = false;
+    }
+
+    async function prepareEditClaseForm(id) {
+        const clase = await fetchGetClasePorId(id);
+        if (clase) {
+            editModeClase = true;
+            idClaseInput.value = clase.idClase;
+            fechaClaseInput.value = clase.fechaClase || '';
+            idMateriaInput.value = clase.idMateria;
+            idProfesorInput.value = clase.idProfesor;
+            idCursoInput.value = clase.idCurso;
+
+            formTitleClase.textContent = 'Editar Clase';
+            btnSubmitClase.textContent = 'Actualizar Clase';
+            btnSubmitClase.classList.remove('btn-primary');
+            btnSubmitClase.classList.add('btn-warning');
+            btnCancelClase.style.display = 'inline-block';
+            
+            fechaClaseInput.focus();
+        }
+    }
+
+    // --- Event Listeners ---
+
+    claseForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        
+        const idMateriaVal = parseInt(idMateriaInput.value, 10);
+        const idProfesorVal = parseInt(idProfesorInput.value, 10);
+        const idCursoVal = parseInt(idCursoInput.value, 10);
+
+        if (isNaN(idMateriaVal) || idMateriaVal < 1) {
+            showAlertClase("El ID de la Materia es obligatorio y debe ser un número válido.", 'warning');
+            idMateriaInput.focus(); return;
+        }
+        if (isNaN(idProfesorVal) || idProfesorVal < 1) {
+            showAlertClase("El ID del Profesor es obligatorio y debe ser un número válido.", 'warning');
+            idProfesorInput.focus(); return;
+        }
+        if (isNaN(idCursoVal) || idCursoVal < 1) {
+            showAlertClase("El ID del Curso es obligatorio y debe ser un número válido.", 'warning');
+            idCursoInput.focus(); return;
+        }
+
+        const claseData = {
+            fechaClase: fechaClaseInput.value ? fechaClaseInput.value : null,
+            idMateria: idMateriaVal,
+            idProfesor: idProfesorVal,
+            idCurso: idCursoVal
+        };
+        
+        const id = idClaseInput.value;
+
+        if (editModeClase && id) {
+            fetchPutClase(id, claseData);
+        } else {
+            fetchPostClase(claseData);
+        }
+    });
+
+    clasesTableBody.addEventListener('click', (event) => {
+        if (event.target.classList.contains('btn-edit-clase')) {
+            const id = event.target.dataset.id;
+            prepareEditClaseForm(id);
+        } else if (event.target.classList.contains('btn-delete-clase')) {
+            const id = event.target.dataset.id;
+            fetchDeleteClase(id);
+        }
+    });
+    
+    btnCancelClase.addEventListener('click', () => {
+        resetClaseForm();
+    });
+
+    fetchGetClases(); // Carga inicial
+});
+            </script>
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Estudiantes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+          crossorigin="anonymous">
+    <style>
+        body { padding-top: 20px; }
+        .container { max-width: 900px; }
+        .table-actions button { margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Gestión de Estudiantes</h1>
+
+        <!-- Formulario Unificado para Crear/Editar Estudiantes -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 id="formTitleEstudiante">Agregar Nuevo Estudiante</h5>
+            </div>
+            <div class="card-body">
+                <form id="estudianteForm">
+                    <input type="hidden" id="idEstudiante" name="idEstudiante">
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nombre" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="apellido" class="form-label">Apellido</label>
+                            <input type="text" class="form-control" id="apellido" name="apellido" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="fechaNacimiento" class="form-label">Fecha de Nacimiento</label>
+                        <input type="date" class="form-control" id="fechaNacimiento" name="fechaNacimiento">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="correo" class="form-label">Correo Electrónico</label>
+                        <input type="email" class="form-control" id="correo" name="correo">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="telefono" class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" id="telefono" name="telefono">
+                    </div>
+                                        
+                    <button type="submit" class="btn btn-primary" id="btnSubmitEstudiante">Agregar Estudiante</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancelEstudiante" style="display: none;">Cancelar Edición</button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Tabla para Listar Estudiantes -->
+        <h2>Lista de Estudiantes</h2>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Apellido</th>
+                        <th>F. Nacimiento</th>
+                        <th>Correo</th>
+                        <th>Teléfono</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="estudiantesTableBody">
+                    <!-- Los datos se cargarán aquí mediante JavaScript -->
+                </tbody>
+            </table>
+        </div>
+         <!-- Contenedor para mensajes de alerta -->
+        <div id="alertMessagesEstudiante" class="mt-3"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+            crossorigin="anonymous"></script>
+            <script>
+        document.addEventListener('DOMContentLoaded', () => {
+    const BASE_URL_ESTUDIANTE = 'EstudianteServlet'; // Debe coincidir con @WebServlet
+
+    const estudianteForm = document.getElementById('estudianteForm');
+    const idEstudianteInput = document.getElementById('idEstudiante');
+    const nombreInput = document.getElementById('nombre');
+    const apellidoInput = document.getElementById('apellido');
+    const fechaNacimientoInput = document.getElementById('fechaNacimiento');
+    const correoInput = document.getElementById('correo');
+    const telefonoInput = document.getElementById('telefono');
+    const estudiantesTableBody = document.getElementById('estudiantesTableBody');
+    const formTitleEstudiante = document.getElementById('formTitleEstudiante');
+    const btnSubmitEstudiante = document.getElementById('btnSubmitEstudiante');
+    const btnCancelEstudiante = document.getElementById('btnCancelEstudiante');
+    const alertMessagesDivEstudiante = document.getElementById('alertMessagesEstudiante');
+
+    let editModeEstudiante = false;
+
+    function showAlertEstudiante(message, type = 'danger') {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = [
+            `<div class="alert alert-${type} alert-dismissible" role="alert">`,
+            `   <div>${escapeHtmlEstudiante(message)}</div>`,
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+            '</div>'
+        ].join('');
+        alertMessagesDivEstudiante.innerHTML = ''; // Limpiar alertas previas
+        alertMessagesDivEstudiante.append(wrapper);
+        
+        setTimeout(() => {
+            const alert = bootstrap.Alert.getOrCreateInstance(wrapper.firstChild);
+            if (alert) {
+                alert.close();
+            }
+        }, 7000); // Aumentado a 7 segundos
+    }
+
+    // --- Funciones CRUD para Estudiantes ---
+
+    async function fetchGetEstudiantes() {
+        try {
+            const response = await fetch(BASE_URL_ESTUDIANTE);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener estudiantes: ${response.statusText}`);
+            }
+            const estudiantes = await response.json();
+            renderTablaEstudiantes(estudiantes);
+        } catch (error) {
+            console.error('Error en fetchGetEstudiantes:', error);
+            showAlertEstudiante(`Error al cargar estudiantes: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchGetEstudiantePorId(id) {
+        try {
+            const response = await fetch(`${BASE_URL_ESTUDIANTE}?id=${id}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener estudiante: ${response.statusText}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error en fetchGetEstudiantePorId:', error);
+            showAlertEstudiante(`Error al obtener datos del estudiante para editar: ${error.message}`, 'danger');
+            return null;
+        }
+    }
+    
+    async function fetchPostEstudiante(estudianteData) {
+        try {
+            const response = await fetch(BASE_URL_ESTUDIANTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: JSON.stringify(estudianteData)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al crear estudiante: ${response.statusText}`);
+            }
+            const nuevoEstudiante = await response.json();
+            console.log('Estudiante creado:', nuevoEstudiante);
+            fetchGetEstudiantes();
+            resetEstudianteForm();
+            showAlertEstudiante('Estudiante agregado exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchPostEstudiante:', error);
+            showAlertEstudiante(`Error al crear estudiante: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchPutEstudiante(id, estudianteData) {
+        try {
+            const dataToSend = { idEstudiante: parseInt(id), ...estudianteData };
+            const response = await fetch(BASE_URL_ESTUDIANTE, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: JSON.stringify(dataToSend)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al actualizar estudiante: ${response.statusText}`);
+            }
+            const estudianteActualizado = await response.json();
+            console.log('Estudiante actualizado:', estudianteActualizado);
+            fetchGetEstudiantes();
+            resetEstudianteForm();
+            showAlertEstudiante('Estudiante actualizado exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchPutEstudiante:', error);
+            showAlertEstudiante(`Error al actualizar estudiante: ${error.message}`, 'danger');
+        }
+    }
+
+    async function fetchDeleteEstudiante(id) {
+        if (!confirm(`¿Está seguro de que desea eliminar el estudiante con ID ${id}?`)) {
+            return;
+        }
+        try {
+            const response = await fetch(`${BASE_URL_ESTUDIANTE}?id=${id}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al eliminar estudiante: ${response.statusText}`);
+            }
+            const resultado = await response.json();
+            console.log('Respuesta de eliminación:', resultado);
+            fetchGetEstudiantes();
+            showAlertEstudiante(resultado.message || 'Estudiante eliminado exitosamente.', 'success');
+        } catch (error) {
+            console.error('Error en fetchDeleteEstudiante:', error);
+            showAlertEstudiante(`Error al eliminar estudiante: ${error.message}`, 'danger');
+        }
+    }
+
+    // --- Funciones Auxiliares ---
+
+    function renderTablaEstudiantes(estudiantes) {
+        estudiantesTableBody.innerHTML = '';
+        if (!estudiantes || !Array.isArray(estudiantes) || estudiantes.length === 0) {
+            estudiantesTableBody.innerHTML = '<tr><td colspan="7" class="text-center">No hay estudiantes registrados.</td></tr>';
+            return;
+        }
+        estudiantes.forEach(estudiante => {
+            const tr = document.createElement('tr');
+            const fechaNacimientoDisplay = estudiante.fechaNacimiento ? estudiante.fechaNacimiento : 'N/A'; // Backend ya envía YYYY-MM-DD
+            
+            tr.innerHTML = `
+                <td>${estudiante.idEstudiante}</td>
+                <td>${escapeHtmlEstudiante(estudiante.nombre)}</td>
+                <td>${escapeHtmlEstudiante(estudiante.apellido)}</td>
+                <td>${fechaNacimientoDisplay}</td>
+                <td>${estudiante.correo ? escapeHtmlEstudiante(estudiante.correo) : 'N/A'}</td>
+                <td>${estudiante.telefono ? escapeHtmlEstudiante(estudiante.telefono) : 'N/A'}</td>
+                <td class="table-actions">
+                    <button class="btn btn-sm btn-warning btn-edit-estudiante" data-id="${estudiante.idEstudiante}">Editar</button>
+                    <button class="btn btn-sm btn-danger btn-delete-estudiante" data-id="${estudiante.idEstudiante}">Eliminar</button>
+                </td>
+            `;
+            estudiantesTableBody.appendChild(tr);
+        });
+    }
+    
+    function escapeHtmlEstudiante(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe === null || typeof unsafe === 'undefined' ? '' : String(unsafe);
+        return unsafe
+             .replace(/&/g, "&")
+             .replace(/</g, "<")
+             .replace(/>/g, ">")
+             .replace(/"/g, "")
+             .replace(/'/g, "'");
+    }
+
+    function resetEstudianteForm() {
+        estudianteForm.reset();
+        idEstudianteInput.value = '';
+        formTitleEstudiante.textContent = 'Agregar Nuevo Estudiante';
+        btnSubmitEstudiante.textContent = 'Agregar Estudiante';
+        btnSubmitEstudiante.classList.remove('btn-warning');
+        btnSubmitEstudiante.classList.add('btn-primary');
+        btnCancelEstudiante.style.display = 'none';
+        nombreInput.required = true;
+        apellidoInput.required = true;
+        editModeEstudiante = false;
+    }
+
+    async function prepareEditEstudianteForm(id) {
+        const estudiante = await fetchGetEstudiantePorId(id);
+        if (estudiante) {
+            editModeEstudiante = true;
+            idEstudianteInput.value = estudiante.idEstudiante;
+            nombreInput.value = estudiante.nombre;
+            apellidoInput.value = estudiante.apellido;
+            fechaNacimientoInput.value = estudiante.fechaNacimiento || ''; // input type="date" espera YYYY-MM-DD
+            correoInput.value = estudiante.correo || '';
+            telefonoInput.value = estudiante.telefono || '';
+
+            formTitleEstudiante.textContent = 'Editar Estudiante';
+            btnSubmitEstudiante.textContent = 'Actualizar Estudiante';
+            btnSubmitEstudiante.classList.remove('btn-primary');
+            btnSubmitEstudiante.classList.add('btn-warning');
+            btnCancelEstudiante.style.display = 'inline-block';
+            
+            nombreInput.focus();
+        }
+    }
+
+    // --- Event Listeners ---
+
+    estudianteForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        
+        if (!nombreInput.value.trim() || !apellidoInput.value.trim()) {
+            showAlertEstudiante("Nombre y Apellido son campos obligatorios.", 'warning');
+            if (!nombreInput.value.trim()) nombreInput.focus();
+            else apellidoInput.focus();
+            return;
+        }
+
+        const estudianteData = {
+            nombre: nombreInput.value.trim(),
+            apellido: apellidoInput.value.trim(),
+            fechaNacimiento: fechaNacimientoInput.value ? fechaNacimientoInput.value : null, // Enviar null si el input date está vacío
+            correo: correoInput.value.trim() || null,
+            telefono: telefonoInput.value.trim() || null
+        };
+        
+        const id = idEstudianteInput.value;
+
+        if (editModeEstudiante && id) {
+            fetchPutEstudiante(id, estudianteData);
+        } else {
+            fetchPostEstudiante(estudianteData);
+        }
+    });
+
+    estudiantesTableBody.addEventListener('click', (event) => {
+        if (event.target.classList.contains('btn-edit-estudiante')) {
+            const id = event.target.dataset.id;
+            prepareEditEstudianteForm(id);
+        } else if (event.target.classList.contains('btn-delete-estudiante')) {
+            const id = event.target.dataset.id;
+            fetchDeleteEstudiante(id);
+        }
+    });
+    
+    btnCancelEstudiante.addEventListener('click', () => {
+        resetEstudianteForm();
+    });
+
+    // Carga inicial de datos
+    fetchGetEstudiantes();
+});
+            </script>
+</body>
+</html>

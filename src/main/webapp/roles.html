@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Gestión de Roles</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="container py-5">
+
+    <h2 class="mb-4">Gestión de Roles</h2>
+
+    <form id="rolForm" class="mb-4">
+        <input type="hidden" id="idRol" />
+        <div class="mb-3">
+            <label for="nombreRol" class="form-label">Nombre del Rol</label>
+            <input type="text" class="form-control" id="nombreRol" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Guardar Rol</button>
+        <button type="button" id="cancelEdit" class="btn btn-secondary d-none">Cancelar</button>
+    </form>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="rolesTable"></tbody>
+    </table>
+
+<script>
+    const url = 'http://localhost:8080/prueba_examen01/RolesServlet';
+    const form = document.getElementById('rolForm');
+    const idRolField = document.getElementById('idRol');
+    const nombreRolField = document.getElementById('nombreRol');
+    const rolesTable = document.getElementById('rolesTable');
+    const cancelEditButton = document.getElementById('cancelEdit');
+
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        if (idRolField.value) {
+            updateRol();
+        } else {
+            createRol();
+        }
+    });
+
+    cancelEditButton.addEventListener('click', () => {
+        form.reset();
+        idRolField.value = '';
+        cancelEditButton.classList.add('d-none');
+    });
+
+    function loadRoles() {
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                rolesTable.innerHTML = '';
+                data.forEach(rol => {
+                    rolesTable.innerHTML += `
+                        <tr>
+                            <td>${rol.idRol}</td>
+                            <td>${rol.nombreRol}</td>
+                            <td>
+                                <button class="btn btn-warning btn-sm" onclick="editRol(${rol.idRol}, '${rol.nombreRol}')">Editar</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteRol(${rol.idRol})">Eliminar</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+    }
+
+    function createRol() {
+        fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nombreRol: nombreRolField.value })
+        })
+        .then(() => {
+            form.reset();
+            loadRoles();
+        });
+    }
+
+    function updateRol() {
+        fetch(url, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ idRol: parseInt(idRolField.value), nombreRol: nombreRolField.value })
+        })
+        .then(() => {
+            form.reset();
+            idRolField.value = '';
+            cancelEditButton.classList.add('d-none');
+            loadRoles();
+        });
+    }
+
+    function deleteRol(idRol) {
+        fetch(url, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ idRol: idRol })
+        })
+        .then(() => loadRoles());
+    }
+
+    function editRol(id, nombre) {
+        idRolField.value = id;
+        nombreRolField.value = nombre;
+        cancelEditButton.classList.remove('d-none');
+    }
+
+    loadRoles();
+</script>
+
+</body>
+</html>

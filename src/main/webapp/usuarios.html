@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+          crossorigin="anonymous">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .table-actions button {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Gestión de Usuarios</h1>
+
+        <!-- Formulario para Crear/Editar -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 id="formTitle">Agregar Nuevo Usuario</h5>
+            </div>
+            <div class="card-body">
+                <form id="usuarioForm">
+                    <input type="hidden" id="idUsuario" name="idUsuario">
+                    
+                    <div class="mb-3">
+                        <label for="nombreUsuario" class="form-label">Nombre de Usuario</label>
+                        <input type="text" class="form-control" id="nombreUsuario" name="nombreUsuario" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="correo" class="form-label">Correo Electrónico</label>
+                        <input type="email" class="form-control" id="correo" name="correo" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="contrasena" class="form-label">Contraseña</label>
+                        <input type="password" class="form-control" id="contrasena" name="contrasena" autocomplete="new-password">
+                        <small id="passwordHelp" class="form-text text-muted">Dejar en blanco si no desea cambiar la contraseña al editar.</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="idRol" class="form-label">ID de Rol</label>
+                        <input type="number" class="form-control" id="idRol" name="idRol" required min="1">
+                         <!-- En una aplicación real, esto sería un <select> poblado con roles existentes -->
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="btnSubmit">Agregar Usuario</button>
+                    <button type="button" class="btn btn-secondary" id="btnCancel" style="display: none;">Cancelar Edición</button>
+                </form>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Tabla para Listar Usuarios -->
+        <h2>Lista de Usuarios</h2>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre Usuario</th>
+                        <th>Correo</th>
+                        <th>ID Rol</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="usuariosTableBody">
+                    <!-- Los datos se cargarán aquí mediante JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+            crossorigin="anonymous"></script>
+            <script>
+        document.addEventListener('DOMContentLoaded', () => {
+    const BASE_URL = 'UsuarioServlet'; // Asegúrate que coincida con @WebServlet
+
+    const usuarioForm = document.getElementById('usuarioForm');
+    const idUsuarioInput = document.getElementById('idUsuario');
+    const nombreUsuarioInput = document.getElementById('nombreUsuario');
+    const correoInput = document.getElementById('correo');
+    const contrasenaInput = document.getElementById('contrasena');
+    const idRolInput = document.getElementById('idRol');
+    const usuariosTableBody = document.getElementById('usuariosTableBody');
+    const formTitle = document.getElementById('formTitle');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const btnCancel = document.getElementById('btnCancel');
+
+    let editMode = false;
+
+    // --- Funciones CRUD ---
+
+    // GET: Obtener todos los usuarios
+    async function fetchUsuarios() {
+        try {
+            const response = await fetch(BASE_URL);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener usuarios: ${response.statusText}`);
+            }
+            const usuarios = await response.json();
+            renderTabla(usuarios);
+        } catch (error) {
+            console.error('Error en fetchUsuarios:', error);
+            alert(`Error al cargar usuarios: ${error.message}`);
+        }
+    }
+
+    // POST: Crear un nuevo usuario
+    async function crearUsuario(usuarioData) {
+        try {
+            const response = await fetch(BASE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=UTF-8'
+                },
+                body: JSON.stringify(usuarioData)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al crear usuario: ${response.statusText}`);
+            }
+            const nuevoUsuario = await response.json();
+            console.log('Usuario creado:', nuevoUsuario);
+            fetchUsuarios(); // Recargar tabla
+            resetForm();
+            alert('Usuario agregado exitosamente.');
+        } catch (error) {
+            console.error('Error en crearUsuario:', error);
+            alert(`Error al crear usuario: ${error.message}`);
+        }
+    }
+
+    // PUT: Actualizar un usuario existente
+    async function actualizarUsuario(id, usuarioData) {
+        // No enviar contraseña si está vacía
+        const dataToSend = { ...usuarioData };
+        if (!dataToSend.contrasena) {
+            delete dataToSend.contrasena;
+        }
+
+        try {
+            const response = await fetch(BASE_URL, { // El ID va en el cuerpo para PUT según el servlet
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json;charset=UTF-8'
+                },
+                body: JSON.stringify({ idUsuario: parseInt(id), ...dataToSend })
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al actualizar usuario: ${response.statusText}`);
+            }
+            const usuarioActualizado = await response.json();
+            console.log('Usuario actualizado:', usuarioActualizado);
+            fetchUsuarios(); // Recargar tabla
+            resetForm();
+            alert('Usuario actualizado exitosamente.');
+        } catch (error) {
+            console.error('Error en actualizarUsuario:', error);
+            alert(`Error al actualizar usuario: ${error.message}`);
+        }
+    }
+
+    // DELETE: Eliminar un usuario
+    async function eliminarUsuario(id) {
+        if (!confirm(`¿Está seguro de que desea eliminar el usuario con ID ${id}?`)) {
+            return;
+        }
+        try {
+            const response = await fetch(`${BASE_URL}?id=${id}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                 const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al eliminar usuario: ${response.statusText}`);
+            }
+            const resultado = await response.json();
+            console.log('Usuario eliminado:', resultado.message);
+            fetchUsuarios(); // Recargar tabla
+            alert(resultado.message || 'Usuario eliminado exitosamente.');
+        } catch (error) {
+            console.error('Error en eliminarUsuario:', error);
+            alert(`Error al eliminar usuario: ${error.message}`);
+        }
+    }
+    
+    // GET: Obtener un usuario por ID (para poblar formulario de edición)
+    async function fetchUsuarioPorId(id) {
+        try {
+            const response = await fetch(`${BASE_URL}?id=${id}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Error HTTP ${response.status}` }));
+                throw new Error(errorData.error || `Error al obtener usuario: ${response.statusText}`);
+            }
+            const usuario = await response.json();
+            return usuario;
+        } catch (error) {
+            console.error('Error en fetchUsuarioPorId:', error);
+            alert(`Error al obtener datos del usuario para editar: ${error.message}`);
+            return null;
+        }
+    }
+
+
+    // --- Funciones Auxiliares ---
+
+    function renderTabla(usuarios) {
+        usuariosTableBody.innerHTML = ''; // Limpiar tabla existente
+        if (!usuarios || usuarios.length === 0) {
+            usuariosTableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay usuarios registrados.</td></tr>';
+            return;
+        }
+        usuarios.forEach(usuario => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${usuario.idUsuario}</td>
+                <td>${escapeHtml(usuario.nombreUsuario)}</td>
+                <td>${escapeHtml(usuario.correo)}</td>
+                <td>${usuario.idRol !== null ? usuario.idRol : 'N/A'}</td>
+                <td class="table-actions">
+                    <button class="btn btn-sm btn-warning btn-edit" data-id="${usuario.idUsuario}">Editar</button>
+                    <button class="btn btn-sm btn-danger btn-delete" data-id="${usuario.idUsuario}">Eliminar</button>
+                </td>
+            `;
+            usuariosTableBody.appendChild(tr);
+        });
+    }
+    
+    // Función para escapar HTML y prevenir XSS básico
+    function escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe;
+        return unsafe
+             .replace(/&/g, "&")
+             .replace(/</g, "<")
+             .replace(/>/g, ">").replace(/"/g, "").replace(/'/g, "'");
+     
+    }
+
+    function resetForm() {
+        usuarioForm.reset();
+        idUsuarioInput.value = '';
+        formTitle.textContent = 'Agregar Nuevo Usuario';
+        btnSubmit.textContent = 'Agregar Usuario';
+        btnSubmit.classList.remove('btn-warning');
+        btnSubmit.classList.add('btn-primary');
+        btnCancel.style.display = 'none';
+        contrasenaInput.setAttribute('placeholder', '');
+        contrasenaInput.required = true;
+        editMode = false;
+    }
+
+    async function prepareEditForm(id) {
+        const usuario = await fetchUsuarioPorId(id);
+        if (usuario) {
+            editMode = true;
+            idUsuarioInput.value = usuario.idUsuario;
+            nombreUsuarioInput.value = usuario.nombreUsuario;
+            correoInput.value = usuario.correo;
+            idRolInput.value = usuario.idRol;
+            // No poblamos la contraseña por seguridad. Se puede dejar en blanco para no cambiarla.
+            contrasenaInput.value = ''; 
+            contrasenaInput.setAttribute('placeholder', 'Dejar en blanco para no cambiar');
+            contrasenaInput.required = false; // No es requerida al editar si no se quiere cambiar
+
+            formTitle.textContent = 'Editar Usuario';
+            btnSubmit.textContent = 'Actualizar Usuario';
+            btnSubmit.classList.remove('btn-primary');
+            btnSubmit.classList.add('btn-warning');
+            btnCancel.style.display = 'inline-block';
+            
+            nombreUsuarioInput.focus(); // Poner foco en el primer campo
+        }
+    }
+
+    // --- Event Listeners ---
+
+    usuarioForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        
+        const id = idUsuarioInput.value;
+        const usuarioData = {
+            nombreUsuario: nombreUsuarioInput.value,
+            correo: correoInput.value,
+            contrasena: contrasenaInput.value, // Se envía vacía si no se cambia en edición
+            idRol: parseInt(idRolInput.value)
+        };
+
+        if (editMode && id) {
+            actualizarUsuario(id, usuarioData);
+        } else {
+            // Asegurar que la contraseña sea obligatoria al crear
+            if (!usuarioData.contrasena) {
+                alert("La contraseña es obligatoria para nuevos usuarios.");
+                contrasenaInput.focus();
+                return;
+            }
+            crearUsuario(usuarioData);
+        }
+    });
+
+    usuariosTableBody.addEventListener('click', (event) => {
+        if (event.target.classList.contains('btn-edit')) {
+            const id = event.target.dataset.id;
+            prepareEditForm(id);
+        } else if (event.target.classList.contains('btn-delete')) {
+            const id = event.target.dataset.id;
+            eliminarUsuario(id);
+        }
+    });
+    
+    btnCancel.addEventListener('click', () => {
+        resetForm();
+    });
+
+    // Carga inicial de datos
+    fetchUsuarios();
+});
+            </script>
+</body>
+</html>
